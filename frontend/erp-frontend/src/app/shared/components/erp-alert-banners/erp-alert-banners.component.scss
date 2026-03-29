@@ -1,0 +1,15 @@
+.banner {
+  margin: 0 1.25rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0 0 6px 6px;
+}
+
+.banner--error {
+  background: #fde8e8;
+  color: #8b1a1a;
+}
+
+.banner--ok {
+  background: #e6f4ea;
+  color: #1b5e20;
+}

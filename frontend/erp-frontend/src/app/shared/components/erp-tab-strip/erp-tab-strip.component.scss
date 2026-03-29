@@ -1,0 +1,23 @@
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #cfd4dc;
+  margin-bottom: 0;
+}
+
+.tabs__btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #5a6578;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+}
+
+.tabs__btn--active {
+  color: #1e3a5f;
+  border-bottom-color: #1e3a5f;
+  background: #fff;
+}

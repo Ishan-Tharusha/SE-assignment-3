@@ -1,0 +1,220 @@
+<div class="erp">
+  <header class="erp__top">
+    <div>
+      <h1 class="erp__title">Purchase management</h1>
+      <p class="erp__sub">Purchase bill entry</p>
+    </div>
+    <nav class="erp__nav">
+      <a routerLink="/audit-logs">Audit logs</a>
+      <span class="erp__online" [class.erp__online--off]="!online()">
+        {{ online() ? 'Online' : 'Offline' }}
+      </span>
+    </nav>
+  </header>
+
+  <app-erp-alert-banners [error]="error()" [success]="success()" />
+
+  <div class="erp__body">
+    <section class="erp__main">
+      <app-erp-tab-strip [tabs]="tabDefs" [activeId]="activeTab()" (tabSelected)="onTabSelected($event)" />
+
+      <form [formGroup]="form" (ngSubmit)="save()" class="panel">
+        @if (activeTab() === 'header') {
+          <div class="grid grid--header">
+            <label class="field">
+              <span>Bill date</span>
+              <input type="date" formControlName="billDate" />
+            </label>
+            <label class="field">
+              <span>Load bill (edit)</span>
+              <select (change)="loadBill(+$any($event.target).value); $any($event.target).value = ''">
+                <option value="">Select saved bill…</option>
+                @for (b of bills(); track b.id) {
+                  <option [value]="b.id">{{ b.billNo }}</option>
+                }
+              </select>
+            </label>
+            <div class="actions-inline">
+              <button type="button" class="btn" (click)="newBill()">New bill</button>
+              <button type="button" class="btn" (click)="runSync()" [disabled]="!online()">Sync offline</button>
+            </div>
+          </div>
+          @if (editingBillNo()) {
+            <p class="hint">Editing <strong>{{ editingBillNo() }}</strong></p>
+          }
+        }
+
+        @if (activeTab() === 'details') {
+          <div class="lines-head">
+            <span>Line items</span>
+            <button type="button" class="btn btn--small" (click)="addLine()">Add row</button>
+          </div>
+          <div class="table-scroll">
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Batch / location</th>
+                  <th>Cost</th>
+                  <th>Price</th>
+                  <th>Qty</th>
+                  <th>Disc %</th>
+                  <th>Line cost</th>
+                  <th>Line sell</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody formArrayName="lines">
+                @for (line of lines.controls; track $index; let i = $index) {
+                  <tr [formGroupName]="i">
+                    <td class="cell-autocomplete">
+                      <div class="item-dropdown-field">
+                        <input
+                          type="text"
+                          formControlName="itemQuery"
+                          placeholder="Item — click for 5, type to filter"
+                          autocomplete="off"
+                          [attr.aria-expanded]="autocompleteRow() === i"
+                          aria-autocomplete="list"
+                          aria-controls="purchase-item-dropdown"
+                          (focus)="openAutocomplete(i, $event)"
+                          (input)="onItemQueryInput(i, $any($event.target).value, $event.target)"
+                          (keydown)="onItemQueryKeydown($event, i)"
+                          (blur)="closeAutocomplete()"
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <select formControlName="locationId">
+                        <option [ngValue]="null">Select…</option>
+                        @for (loc of locations(); track loc.id) {
+                          <option [ngValue]="loc.id">{{ loc.code }} — {{ loc.name }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td><input type="number" step="0.01" formControlName="cost" /></td>
+                    <td><input type="number" step="0.01" formControlName="price" /></td>
+                    <td><input type="number" step="1" formControlName="quantity" /></td>
+                    <td><input type="number" step="0.01" formControlName="discountPercent" /></td>
+                    <td class="num">{{ lineTotalCost($any(line)) | number: '1.2-2' }}</td>
+                    <td class="num">{{ lineTotalSelling($any(line)) | number: '1.2-2' }}</td>
+                    <td>
+                      <button type="button" class="btn btn--danger btn--icon" (click)="removeLine(i)" title="Remove">×</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (autocompleteRow() !== null && itemDropdownLayout(); as dd) {
+            <ul
+              id="purchase-item-dropdown"
+              class="item-dropdown-panel"
+              role="listbox"
+              [attr.aria-activedescendant]="
+                itemSuggestions().length ? 'item-opt-' + autocompleteHighlight() : null
+              "
+              [style.top.px]="dd.top"
+              [style.left.px]="dd.left"
+              [style.width.px]="dd.width"
+              [style.max-height.px]="dd.maxHeight"
+            >
+              @if (itemSuggestions().length === 0) {
+                <li class="item-dropdown-panel__empty">No matching items</li>
+              } @else {
+                @for (opt of itemSuggestions(); track opt.id; let j = $index) {
+                  <li role="presentation">
+                    <button
+                      type="button"
+                      id="item-opt-{{ j }}"
+                      role="option"
+                      class="item-dropdown-panel__option"
+                      [class.item-dropdown-panel__option--active]="autocompleteHighlight() === j"
+                      [attr.aria-selected]="autocompleteHighlight() === j"
+                      (mouseenter)="autocompleteHighlight.set(j)"
+                      (mousedown)="selectItem(autocompleteRow()!, opt); $event.preventDefault()"
+                    >
+                      {{ opt.name }}
+                    </button>
+                  </li>
+                }
+              }
+            </ul>
+          }
+        }
+
+        @if (activeTab() === 'summary') {
+          <div class="summary-tab">
+            <p>Total line items: <strong>{{ summary().lineCount }}</strong></p>
+            <p>Total quantity: <strong>{{ summary().totalQty }}</strong></p>
+            <p>Total cost (after discount): <strong>{{ summary().totalCost | number: '1.2-2' }}</strong></p>
+            <p>Total selling amount: <strong>{{ summary().totalSelling | number: '1.2-2' }}</strong></p>
+          </div>
+        }
+
+        <footer class="form-footer">
+          <button type="submit" class="btn btn--primary" [disabled]="saving() || loading()">
+            {{ saving() ? 'Saving…' : editingId() != null ? 'Update bill' : 'Save bill' }}
+          </button>
+          <button type="button" class="btn" (click)="openPdf()" [disabled]="editingId() == null">Export PDF</button>
+        </footer>
+      </form>
+    </section>
+
+    <aside class="erp__aside" aria-label="Summary">
+      <h2>Summary</h2>
+      <app-erp-loading-inline [show]="loading()" message="Loading master data…" />
+      @if (!loading()) {
+        <dl class="stat">
+          <dt>Total items</dt>
+          <dd>{{ summary().lineCount }}</dd>
+          <dt>Total quantity</dt>
+          <dd>{{ summary().totalQty }}</dd>
+          <dt>Total amount</dt>
+          <dd>{{ summary().totalSelling | number: '1.2-2' }}</dd>
+          <dt>Total cost</dt>
+          <dd>{{ summary().totalCost | number: '1.2-2' }}</dd>
+        </dl>
+      }
+      <h3>Offline queue</h3>
+      @if (pending().length === 0) {
+        <p class="muted">No pending bills.</p>
+      } @else {
+        <ul class="pending">
+          @for (p of pending(); track p.key) {
+            <li>
+              <span class="badge" [class.badge--pending]="p.status === 'Pending'" [class.badge--sync]="p.status === 'Syncing'">
+                {{ p.status }}
+              </span>
+              <span class="muted">{{ p.createdAt | date: 'short' }}</span>
+            </li>
+          }
+        </ul>
+      }
+      <h3>Recent syncs</h3>
+      @if (syncHistory().length === 0) {
+        <p class="muted">Synced bills appear here after the offline queue uploads.</p>
+      } @else {
+        <ul class="sync-history">
+          @for (h of syncHistory(); track h.syncedAt + '-' + h.billCount + '-' + $index) {
+            <li>
+              <span class="badge badge--synced">Synced</span>
+              <span class="sync-history__meta">{{ h.billCount }} bill(s) · {{ h.syncedAt | date: 'medium' }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </aside>
+  </div>
+
+  @if (showUpdateConfirm()) {
+    <app-erp-confirm-dialog
+      title="Update this bill?"
+      [message]="updateConfirmMessage()"
+      confirmLabel="Update"
+      cancelLabel="Cancel"
+      (confirm)="executePendingUpdate()"
+      (cancel)="cancelUpdateConfirm()"
+    />
+  }
+</div>
